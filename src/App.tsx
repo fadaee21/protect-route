@@ -1,11 +1,120 @@
-import React, { useState } from "react";
+import React, { useState, createContext, useContext } from "react";
 import {
   createBrowserRouter,
   RouterProvider,
   Outlet,
   Link,
   useLocation,
+  Navigate,
+  useNavigate,
 } from "react-router-dom";
+
+// Auth Context
+interface AuthContextType {
+  isAuthenticated: boolean;
+  login: (username: string, password: string) => boolean;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextType>({
+  isAuthenticated: false,
+  login: () => false,
+  logout: () => {},
+});
+
+// Auth Provider
+const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const login = (username: string, password: string) => {
+    // Mock authentication logic (replace with real auth in production)
+    if (username === "admin" && password === "123456") {
+      setIsAuthenticated(true);
+      return true;
+    }
+    return false;
+  };
+
+  const logout = () => {
+    setIsAuthenticated(false);
+  };
+
+  return (
+    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// Protected Route Component
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const { isAuthenticated } = useContext(AuthContext);
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+};
+
+// Login Page
+const LoginPage = () => {
+  const { login } = useContext(AuthContext);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
+
+  const handleLogin = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    if (login(username, password)) {
+      setError("");
+      navigate("/"); // Redirect to dashboard
+    } else {
+      setError("Invalid credentials");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-white p-8 rounded-lg shadow-sm border max-w-md w-full">
+        <h1 className="text-2xl font-bold text-gray-900 mb-6">Login</h1>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Username
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full p-2 border rounded-md"
+              placeholder="Enter username"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full p-2 border rounded-md"
+              placeholder="Enter password"
+            />
+          </div>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
+          <button
+            onClick={handleLogin}
+            className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Mock Pages
 const DashboardPage = () => (
@@ -333,13 +442,16 @@ const navigationItems = [
   { name: "Customers", href: "/customers", icon: CustomersIcon },
   { name: "Settings", href: "/settings", icon: SettingsIcon },
 ];
+
 interface IPropsHeader {
   sidebarOpen: boolean;
   setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
+
 // Header Component
 const Header = ({ sidebarOpen, setSidebarOpen }: IPropsHeader) => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const { logout } = useContext(AuthContext);
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 fixed top-0 left-0 right-0 z-30">
@@ -377,24 +489,24 @@ const Header = ({ sidebarOpen, setSidebarOpen }: IPropsHeader) => {
             {userMenuOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50">
                 <Link
-                  to="#"
+                  to="/settings"
                   className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   Profile
                 </Link>
                 <Link
-                  to="#"
+                  to="/settings"
                   className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   Account Settings
                 </Link>
                 <hr className="my-1" />
-                <Link
-                  to="#"
-                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                <button
+                  onClick={logout}
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   Sign Out
-                </Link>
+                </button>
               </div>
             )}
           </div>
@@ -490,7 +602,7 @@ const Layout = () => {
       />
 
       {/* Main area */}
-      <div className="flex-1 ">
+      <div className="flex-1">
         <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
         <main className="pt-16 px-4">
           <Outlet />
@@ -506,18 +618,61 @@ const router = createBrowserRouter([
     path: "/",
     Component: Layout,
     children: [
-      { index: true, Component: DashboardPage },
-      { path: "transactions", Component: TransactionsPage },
-      { path: "accounts", Component: AccountsPage },
-      { path: "customers", Component: CustomersPage },
-      { path: "settings", Component: SettingsPage },
+      {
+        index: true,
+        element: (
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "transactions",
+        element: (
+          <ProtectedRoute>
+            <TransactionsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "accounts",
+        element: (
+          <ProtectedRoute>
+            <AccountsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "customers",
+        element: (
+          <ProtectedRoute>
+            <CustomersPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "settings",
+        element: (
+          <ProtectedRoute>
+            <SettingsPage />
+          </ProtectedRoute>
+        ),
+      },
     ],
+  },
+  {
+    path: "login",
+    element: <LoginPage />,
   },
 ]);
 
 // Main App Component
 const App = () => {
-  return <RouterProvider router={router} />;
+  return (
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
+  );
 };
 
 export default App;
